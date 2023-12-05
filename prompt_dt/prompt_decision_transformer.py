@@ -15,6 +15,7 @@ class PromptDecisionTransformer(nn.Module):
             self,
             env_name_list,
             info,
+            special_embedding,
             hidden_size,
             max_length=None,
             max_ep_len=4096,
@@ -24,6 +25,7 @@ class PromptDecisionTransformer(nn.Module):
         super().__init__()
         self.env_name_list = env_name_list
         self.info = info
+        self.special_embedding = special_embedding
         self.max_length = max_length
         self.hidden_size = hidden_size
         self.max_ep_len = max_ep_len
@@ -40,18 +42,33 @@ class PromptDecisionTransformer(nn.Module):
         self.embed_ln = nn.LayerNorm(hidden_size)
         self.predict_return = torch.nn.Linear(hidden_size, 1)
 
-        for name in env_name_list:
-            setattr(self, f"{name}_embed_state", torch.nn.Linear(self.info[name]['state_dim'], hidden_size))
-            setattr(self, f"{name}_embed_action", torch.nn.Linear(self.info[name]['act_dim'], hidden_size))
-            setattr(self, f"{name}_predict_state", torch.nn.Linear(hidden_size, self.info[name]['state_dim']))
-            setattr(self, f"{name}_predict_action", nn.Sequential(
+        if special_embedding is True:
+            for name in env_name_list:
+                setattr(self, f"{name}_embed_state", torch.nn.Linear(self.info[name]['state_dim'], hidden_size))
+                setattr(self, f"{name}_embed_action", torch.nn.Linear(self.info[name]['act_dim'], hidden_size))
+                setattr(self, f"{name}_predict_state", torch.nn.Linear(hidden_size, self.info[name]['state_dim']))
+                setattr(self, f"{name}_predict_action", nn.Sequential(
+                    *([nn.Linear(hidden_size, self.info[name]['act_dim'])] + ([nn.Tanh()] if action_tanh else []))
+                ))
+
+                # prompt
+                setattr(self, f"{name}_prompt_embed_state", torch.nn.Linear(self.info[name]['state_dim'], hidden_size))
+                setattr(self, f"{name}_prompt_embed_action", torch.nn.Linear(self.info[name]['act_dim'], hidden_size))
+                setattr(self, f"{name}_prompt_predict_action", torch.nn.Linear(self.info[name]['act_dim'], hidden_size))
+        else:
+            name = env_name_list[0]
+            setattr(self, f"embed_state", torch.nn.Linear(self.info[name]['state_dim'], hidden_size))
+            setattr(self, f"embed_action", torch.nn.Linear(self.info[name]['act_dim'], hidden_size))
+            setattr(self, f"predict_state", torch.nn.Linear(hidden_size, self.info[name]['state_dim']))
+            setattr(self, f"predict_action", nn.Sequential(
                 *([nn.Linear(hidden_size, self.info[name]['act_dim'])] + ([nn.Tanh()] if action_tanh else []))
             ))
 
             # prompt
-            setattr(self, f"{name}_prompt_embed_state", torch.nn.Linear(self.info[name]['state_dim'], hidden_size))
-            setattr(self, f"{name}_prompt_embed_action", torch.nn.Linear(self.info[name]['act_dim'], hidden_size))
-            setattr(self, f"{name}_prompt_predict_action", torch.nn.Linear(self.info[name]['act_dim'], hidden_size))
+            setattr(self, f"prompt_embed_state", torch.nn.Linear(self.info[name]['state_dim'], hidden_size))
+            setattr(self, f"prompt_embed_action", torch.nn.Linear(self.info[name]['act_dim'], hidden_size))
+            setattr(self, f"prompt_predict_action", torch.nn.Linear(self.info[name]['act_dim'], hidden_size))
+
 
         self.prompt_embed_timestep = nn.Embedding(max_ep_len, hidden_size)
         self.prompt_embed_return = torch.nn.Linear(1, hidden_size)
@@ -63,10 +80,16 @@ class PromptDecisionTransformer(nn.Module):
             # attention mask for GPT: 1 if can be attended to, 0 if not
             attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long)
 
-        embed_state = getattr(self, f"{env_name}_embed_state")
-        embed_action = getattr(self, f"{env_name}_embed_action")
-        predict_state = getattr(self, f"{env_name}_predict_state")
-        predict_action = getattr(self, f"{env_name}_predict_action")
+        if self.special_embedding:
+            embed_state = getattr(self, f"{env_name}_embed_state")
+            embed_action = getattr(self, f"{env_name}_embed_action")
+            predict_state = getattr(self, f"{env_name}_predict_state")
+            predict_action = getattr(self, f"{env_name}_predict_action")
+        else:
+            embed_state = getattr(self, f"embed_state")
+            embed_action = getattr(self, f"embed_action")
+            predict_state = getattr(self, f"predict_state")
+            predict_action = getattr(self, f"predict_action")
 
         # embed each modality with a different head
         state_embeddings = embed_state(states)
@@ -96,8 +119,13 @@ class PromptDecisionTransformer(nn.Module):
             prompt_states, prompt_actions, prompt_rewards, prompt_dones, prompt_returns_to_go, prompt_timesteps, prompt_attention_mask = prompt
             prompt_seq_length = prompt_states.shape[1]
 
-            prompt_embed_state = getattr(self, f"{env_name}_prompt_embed_state")
-            prompt_embed_action = getattr(self, f"{env_name}_prompt_embed_action")
+            if self.special_embedding:
+                prompt_embed_state = getattr(self, f"{env_name}_prompt_embed_state")
+                prompt_embed_action = getattr(self, f"{env_name}_prompt_embed_action")
+            else:
+                prompt_embed_state = getattr(self, f"prompt_embed_state")
+                prompt_embed_action = getattr(self, f"prompt_embed_action")
+            
             prompt_state_embeddings = prompt_embed_state(prompt_states)
             prompt_action_embeddings = prompt_embed_action(prompt_actions)
             if prompt_returns_to_go.shape[1] % 10 == 1:

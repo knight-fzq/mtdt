@@ -107,6 +107,8 @@ def prompt_evaluate_episode_rtg(
     state_std = torch.from_numpy(state_std).to(device=device)
 
     state = env.reset()
+    if type(state) is tuple:
+        state = state[0]
     if mode == 'noise':
         state = state + np.random.normal(0, 0.1, size=state.shape)
 
@@ -122,7 +124,7 @@ def prompt_evaluate_episode_rtg(
 
     sim_states = []
 
-    episode_return, episode_length = 0, 0
+    episode_return, episode_length, success = 0, 0, 0
     for t in range(max_ep_len):
         # print('evaluate/t', t)
         # add padding
@@ -152,7 +154,7 @@ def prompt_evaluate_episode_rtg(
         actions[-1] = action
         action = action.detach().cpu().numpy()
 
-        state, reward, done, infos = env.step(action)
+        state, reward, done, truncate, infos = env.step(action)
 
         cur_state = torch.from_numpy(state).to(device=device).reshape(1, state_dim)
         states = torch.cat([states, cur_state], dim=0)
@@ -174,10 +176,13 @@ def prompt_evaluate_episode_rtg(
 
         episode_return += reward
         episode_length += 1
+        if infos['success'] > 1e-8:
+           success = 1
 
-        if done:
+        if done or truncate:
             break
 
-        infos['episode_length'] = episode_length
+        # infos['episode_length'] = episode_length
+        # infos['success'] = success
 
-    return episode_return, infos
+    return episode_return, episode_length, success 

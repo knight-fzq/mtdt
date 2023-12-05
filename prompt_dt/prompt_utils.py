@@ -1,12 +1,13 @@
 import numpy as np
 import gym
 import json, pickle, random, os, torch
+import metaworld
 from collections import namedtuple
 from .prompt_evaluate_episodes import prompt_evaluate_episode, prompt_evaluate_episode_rtg
 
 """ constructing envs """
 
-def gen_env(env_name, seed=1):
+def gen_env(env_name, seed=1, total_env=None, num_eval_episodes=0):
     if env_name == 'hopper':
         env = gym.make('Hopper-v3')
         max_ep_len = 1000
@@ -65,26 +66,52 @@ def gen_env(env_name, seed=1):
         scale = 100.
         dversion = 0
     else:
-        raise NotImplementedError
+        if 'metaworld' in total_env:
+            task = metaworld.MT1(env_name).train_tasks[0]
+            env = metaworld.MT1(env_name).train_classes[env_name]()
+            env.set_task(task)
+            env.seed(seed)
+            max_ep_len = 500
+            env_targets = [4500]
+            scale = 1000.
+            dversion = 0 #compatible
+
+            if 'test' in total_env:
+                task = [metaworld.MT1(env_name).train_tasks[i] for i in range(num_eval_episodes)]
+                mt1 = [metaworld.MT1(env_name) for i in range(num_eval_episodes)]
+                env_list = [mt1[i].train_classes[env_name]() for i in range(num_eval_episodes)]
+                for i in range(len(env_list)):
+                    env_list[i].set_task(task[i])
+                    env_list[i].seed(seed)
+                env = env_list
+
+        else:
+            raise NotImplementedError
     return env, max_ep_len, env_targets, scale, dversion
 
 
-def get_env_list(env_name_list, device, seed=1):
+def get_env_list(env_name_list, device, total_env=None, seed=1, num_eval_episodes=10):
     info = {} # store all the attributes for each env
     env_list = []
     
     for env_name in env_name_list:
         info[env_name] = {}
-        env, max_ep_len, env_targets, scale, dversion = gen_env(env_name=env_name, seed=seed)
+        env, max_ep_len, env_targets, scale, dversion = gen_env(env_name=env_name, seed=seed, total_env=total_env, num_eval_episodes=num_eval_episodes)
         info[env_name]['max_ep_len'] = max_ep_len
         info[env_name]['env_targets'] = env_targets
         info[env_name]['scale'] = scale
-        info[env_name]['state_dim'] = env.observation_space.shape[0]
-        info[env_name]['act_dim'] = env.action_space.shape[0] 
+        if type(env) is list:
+            info[env_name]['state_dim'] = env[0].observation_space.shape[0]
+            info[env_name]['act_dim'] = env[0].action_space.shape[0] 
+        else:
+            info[env_name]['state_dim'] = env.observation_space.shape[0]
+            info[env_name]['act_dim'] = env.action_space.shape[0] 
         info[env_name]['device'] = device
         info[env_name]['dversion'] = dversion
         env_list.append(env)
     return info, env_list
+
+
 
 
 """ prompts """
@@ -428,6 +455,34 @@ def load_data_prompt(env_name_list, data_save_path, dataset, prompt_mode, info):
 
     return trajectories_list, prompt_trajectories_list
 
+def load_meta_data_prompt(env_name_list, data_save_path, optimal=True):
+    trajectories_list = []
+    prompt_trajectories_list = []
+
+    length = 2000 if optimal else 1000
+    for task_id in range(len(env_name_list)):
+        path = os.path.join(data_save_path, env_name_list[task_id])
+        cur_task_trajs = []
+        for i in range(length-2):
+            cur_path = os.path.join(path, f"{i}.npz")
+            with open(cur_path, 'rb') as f:
+                episode = np.load(f)
+                episode = {k: episode[k] for k in episode.keys()}
+            cur_task_trajs.append(episode)
+        trajectories_list.append(cur_task_trajs)
+
+        cur_task_prompt_trajs = []
+        for i in range(length-2, length):
+            cur_path = os.path.join(path, f"{i}.npz")
+            with open(cur_path, 'rb') as f:
+                episode = np.load(f)
+                episode = {k: episode[k] for k in episode.keys()}
+            cur_task_prompt_trajs.append(episode)
+        prompt_trajectories_list.append(cur_task_trajs)
+    
+    return trajectories_list, prompt_trajectories_list
+                
+
 
 def process_info(env_name_list, trajectories_list, info, mode, dataset, pct_traj, variant, logger):
     for i, env_name in enumerate(env_name_list):
@@ -461,11 +516,13 @@ def eval_episodes(target_rew, info, variant, env, env_name):
 
     def fn(model, prompt=None):
         returns = []
-        for _ in range(num_eval_episodes):
+        success = []
+        length = []
+        for i in range(num_eval_episodes):
             with torch.no_grad():
-                ret, infos = prompt_evaluate_episode_rtg(
+                ret, lens, suc = prompt_evaluate_episode_rtg(
                     env_name,
-                    env,
+                    env[i],
                     state_dim,
                     act_dim,
                     model,
@@ -482,9 +539,15 @@ def eval_episodes(target_rew, info, variant, env, env_name):
                     no_state_normalize=variant['no_state_normalize']                
                     )
             returns.append(ret)
+            length.append(lens)
+            success.append(suc)
         return {
             f'{env_name}_target_{target_rew}_return_mean': np.mean(returns),
             f'{env_name}_target_{target_rew}_return_std': np.std(returns),
+            f'{env_name}_target_{target_rew}_length_mean': np.mean(length),
+            f'{env_name}_target_{target_rew}_length_std': np.std(length),
+            f'{env_name}_target_{target_rew}_success_mean': np.mean(success),
+            f'{env_name}_target_{target_rew}_success_std': np.std(success),
             }
     return fn
 

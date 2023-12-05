@@ -461,6 +461,78 @@ class PromptSequenceTrainer:
 
         return logs
 
+    def eval_iteration_metaworld(self, env_masks, get_prompt, prompt_trajectories_list, eval_episodes, env_name_list, info, prompt_info,
+                                variant, env_list, iter_num=0, print_logs=False, no_prompt=False, group='test', prompts=None,
+                                ):
+        
+        self.logger.log('=' * 80)
+        self.logger.log('evaluate at tasks: ')
+        for i in env_name_list:
+            self.logger.log(i)
+        logs = dict()
+        self.logger.log('start evaluating...')
+        self.model.eval()
+
+        model = copy.deepcopy(self.model)
+        params = apply_final_mask(model, env_masks, 1)
+        model.load_state_dict(params)
+
+        eval_start = time.time()
+        for env_id, env_name in enumerate(env_name_list):
+            
+            # need to sample eval_fn and prompt together 
+            self.logger.log(f'Evaluate at task: {env_name}')
+            self.eval_fns = [eval_episodes(tar, info[env_name], variant, env_list[env_id], env_name) for tar in info[env_name]['env_targets']]
+            self.get_prompt = get_prompt(prompt_trajectories_list[env_id], prompt_info[env_name], variant)
+            if not no_prompt:
+                self.prompt = flatten_prompt(self.get_prompt(index=0), batch_size=1)
+                if prompts is not None:
+                    self.prompt = prompts[env_name]
+            else:
+                self.prompt = None
+            for eval_fn in self.eval_fns:
+                # print('env_name : ', env_list[env_id])
+                outputs = eval_fn(model, prompt=self.prompt)
+                for k, v in outputs.items():
+                    logs[f'{group}-evaluation/{k}'] = v
+
+        logs['time/evaluation'] = time.time() - eval_start
+
+        for k in self.diagnostics:
+            logs[k] = self.diagnostics[k]
+
+        total_return_mean = {}
+        total_success_mean = {}
+        self.logger.record_tabular('Iteration', iter_num)
+        for k, v in logs.items():
+            self.logger.record_tabular(k, float(v))
+            if 'return_mean' in k:
+                env = k.split('/')[1].split('_')[0]
+                if env not in total_return_mean.keys():
+                    total_return_mean[env] = float(v)
+                elif total_return_mean[env] < float(v):
+                    total_return_mean[env] = float(v)
+            if 'success_mean' in k:
+                if env not in total_success_mean.keys():
+                    total_success_mean[env] = float(v)
+                elif total_success_mean[env] < float(v):
+                    total_success_mean[env] = float(v)
+        
+        total_mean = []
+        total_success = []
+        for k, v in total_return_mean.items():
+            self.logger.record_tabular(k + ' Return', float(v))
+            self.logger.record_tabular(k + ' success', float(total_success_mean[k]))
+            total_mean.append(v)
+            total_success.append(total_success_mean[k])
+        self.logger.record_tabular('Total return mean', np.mean(total_mean))
+        self.logger.record_tabular('Total success mean', np.mean(total_success))
+        self.logger.dump_tabular()
+        logs[f'Total_Return_Mean'] = np.mean(total_mean)
+        logs[f'Total_Success_Mean'] = np.mean(total_success)
+
+        return logs
+
  
     def save_model(self, env_name, postfix, folder, env_masks):
 

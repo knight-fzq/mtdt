@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=$1 python pdt_meta.py --seed 123 --max_iters 10000 --n_layer 6 --n_head 8 --test_eval_interval 1000
