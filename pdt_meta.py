@@ -276,7 +276,7 @@ def experiment_mix_env(
                 env_masks_vectors={name:dict_to_vector(env_masks[name]) for name in env_masks}
                 model_vec = parameters_to_vector(trainer.model.parameters())                       
                 dead_masks_vectors=mask_dead_harmo(harmo_gradient, gradient_set, env_masks_vectors, args.mask_change_ratio)
-                generate_masks_vectors=mask_generate_harmo(harmo_gradient, gradient_set, env_masks_vectors, model_vec, thres=args.conflict_thres, ratio=args.mask_change_ratio)
+                generate_masks_vectors=mask_generate_harmo(harmo_gradient, gradient_set, env_masks_vectors, model_vec, thresh=args.conflict_thres, ratio=args.mask_change_ratio)
                 for name in env_masks_vectors:
                     env_masks_vectors[name]=env_masks_vectors[name]-generate_masks_vectors[name]+dead_masks_vectors[name]
                     vector_to_dict(env_masks[name], env_masks_vectors[name])
