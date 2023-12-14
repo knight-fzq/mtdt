@@ -15,9 +15,9 @@ def get_harmo_gradient(gradient_set):
         idx+=1
     harmo_gradient/=idx
     return harmo_gradient
-def mask_dead_harmo(harmo_gradient,gradient_set,mask_vectors,ratio=0.0001):
+
+def mask_dead_harmo(harmo_gradient, gradient_set, mask_vectors,ratio=0.0001):
     num_dead=int(len(harmo_gradient)*ratio)
-    print(num_dead)
     #index=torch.zeros(harmo_gradient.size())
     num_task=len(mask_vectors)
     #mask_vectors=[dict_to_vector(masks[name]) for name in masks]
@@ -46,14 +46,14 @@ def mask_dead_harmo(harmo_gradient,gradient_set,mask_vectors,ratio=0.0001):
     #num_dead=len(harmo_gradient)*ratio
     #pass
 
-def mask_generate_harmo(harmo_gradient,gradient_set,mask_vectors,model_vec,thresh=1,ratio=0.0001):
+def mask_generate_harmo(harmo_gradient, gradient_set, mask_vectors, model_vec, thresh=0, ratio=0.0001):
     num_new=int(len(harmo_gradient)*ratio)
     new_vectors={name:torch.zeros(mask_vectors[name].size()).cuda() for name in mask_vectors}
     eps=1e-6
     for name in mask_vectors:
         #mask_vec=dict_to_vector(env_masks[name])
         simi_vec=harmo_gradient*gradient_set[name]*mask_vectors[name]
-        num_conflict=torch.sum(simi_vec<0)
+        num_conflict=torch.sum(simi_vec<thresh)
         #print(num_conflict)
         #sum(i < thresh for i in simi_vec)
         #new_mask=copy(mask)
@@ -75,8 +75,6 @@ def get_new_masks(dead_masks,new_masks,env_masks):
     for name in env_masks:
         env_masks[name]=env_masks[name]+dead_masks[name]-new_masks[name]
     pass
-
-
 
 def parameters_to_gradvector(net):
     vec = []

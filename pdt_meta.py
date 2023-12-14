@@ -49,16 +49,17 @@ mt45_task_list = ['basketball-v2', 'button-press-topdown-v2',
     'peg-unplug-side-v2', 'reach-wall-v2', 'stick-push-v2', 'stick-pull-v2']
 
 mt50_task_list = ['basketball-v2', 'bin-picking-v2', 'button-press-topdown-v2',
-    'button-press-v2', 'button-press-wall-v2',]
-    #  'coffee-button-v2',
-    # 'coffee-pull-v2', 'coffee-push-v2', 'dial-turn-v2', 'disassemble-v2', 'door-close-v2', 'door-lock-v2',
-    # 'door-open-v2', 'door-unlock-v2', 'hand-insert-v2', 'drawer-close-v2', 'drawer-open-v2', 'faucet-open-v2',
-    # 'faucet-close-v2',  'handle-press-side-v2', 'handle-press-v2', 'handle-pull-side-v2', 'handle-pull-v2',
-    # 'lever-pull-v2', 'peg-insert-side-v2', 'pick-place-wall-v2', 'pick-out-of-hole-v2', 'reach-v2', 'push-back-v2',
-    # 'push-v2', 'pick-place-v2', 'plate-slide-v2', 'plate-slide-side-v2', 'plate-slide-back-v2',
-    # 'plate-slide-back-side-v2',  'soccer-v2', 'push-wall-v2',  'shelf-place-v2', 'sweep-into-v2', 'sweep-v2', 'window-open-v2',
-    # 'window-close-v2','assembly-v2','button-press-topdown-wall-v2','hammer-v2','peg-unplug-side-v2',
-    # 'reach-wall-v2', 'stick-push-v2', 'stick-pull-v2', 'box-close-v2']
+    'button-press-v2', 'button-press-wall-v2',
+     'coffee-button-v2',
+    'coffee-pull-v2', 'coffee-push-v2', 'dial-turn-v2', 'disassemble-v2',
+     'door-close-v2', 'door-lock-v2',
+    'door-open-v2', 'door-unlock-v2', 'hand-insert-v2', 'drawer-close-v2', 'drawer-open-v2', 'faucet-open-v2',
+    'faucet-close-v2',  'handle-press-side-v2', 'handle-press-v2', 'handle-pull-side-v2', 'handle-pull-v2',
+    'lever-pull-v2', 'peg-insert-side-v2', 'pick-place-wall-v2', 'pick-out-of-hole-v2', 'reach-v2', 'push-back-v2',
+    'push-v2', 'pick-place-v2', 'plate-slide-v2', 'plate-slide-side-v2', 'plate-slide-back-v2',
+    'plate-slide-back-side-v2',  'soccer-v2', 'push-wall-v2',  'shelf-place-v2', 'sweep-into-v2', 'sweep-v2', 'window-open-v2',
+    'window-close-v2','assembly-v2','button-press-topdown-wall-v2','hammer-v2','peg-unplug-side-v2',
+    'reach-wall-v2', 'stick-push-v2', 'stick-pull-v2', 'box-close-v2']
 
 def experiment_mix_env(
         exp_prefix,
@@ -95,13 +96,13 @@ def experiment_mix_env(
     train_env_name_list, test_env_name_list = mt50_task_list, mt50_task_list
 
     # training envs
-    info, env_list = get_env_list(train_env_name_list, device, total_env='metaworld', seed=seed)
+    info, _ = get_env_list(train_env_name_list, device, total_env='metaworld', seed=seed)
     # testing envs
     test_info, test_env_list = get_env_list(test_env_name_list, device,total_env='metaworld_test', seed=seed)
 
     num_env = len(train_env_name_list)
     exp_prefix = '-'.join(train_env_name_list)
-    group_name = f'metaworld50'
+    group_name = variant['prefix_name']
     Evaluation_token = 'Evaluation' if Evaluation else '-'
     exp_prefix = f'{Evaluation_token}-{seed}-{timestr}'
     if variant['no_prompt']:
@@ -199,128 +200,87 @@ def experiment_mix_env(
             model_post_fix += '_NO_R'
         
         best_ret = -10000
+        best_sep_ret = -10000
+        best_iter = 0
+        best_sep_iter = 0
         env_masks = {}
-        gradient_set={}
-        #gradient_set
         mode="random"
-        if mode=="random_same":
+        if mode =="random_same":
             mask=ERK_maskinit(model, variant['sparsity'])
             for env_name in train_env_name_list:
-                #env_name = train_env_name_list[env_id]
-                
-                #masks = ERK_maskinit(model, variant['sparsity'])
                 env_masks[env_name] = mask
-        if mode=="random":
-            
+        elif mode =="random":
             for env_name in train_env_name_list:
                 mask=ERK_maskinit(model, variant['sparsity'])
-                #env_name = train_env_name_list[env_id]
-                
-                #masks = ERK_maskinit(model, variant['sparsity'])
                 env_masks[env_name] = mask
         harmo_gradient=None
-        for iter in range(variant['max_iters']):
-            #ratio=cosine_annealing()
-            for env_name in train_env_name_list:
-            #env_id = iter % num_env
-                #env_name = train_env_name_list[env_id]
-                # if env_name not in env_masks:
-                #     masks = ERK_maskinit(model, variant['sparsity'])
-                #     env_masks[env_name] = masks
-                # else:
-                #     masks = env_masks[env_name]
-                original_param = model.state_dict()
-                param_after_mask = apply_mask_model(model, env_masks[env_name])
-                model.load_state_dict(param_after_mask)
-                trainer.update_gradient(
-                    num_steps=variant['num_steps_per_iter'], 
-                    no_prompt=args.no_prompt,
-                    masks = env_masks[env_name],
-                    env_name = env_name,
-                    alpha_t = iter / variant['max_iters'],
-                )
-                # for item in model.parameters():
-                #     print(item.grad)
-                
-                #apply_mask_grad(model, env_masks[env_name])
-                # for item in model.parameters():
-                #     print(item.grad)
-                #self.optimizer.step()
 
-                # for param in model.parameters():
-                #     print(param.grad)
-                # for param in model.parameters():
-                #     print(param.grad)
-                gradient_set[env_name]=parameters_to_gradvector(model)
-                #gradient_set[]
-                load_original_parameters(model, original_param, env_masks[env_name])
-                #env_masks[env_name] = masks
-            #harmo_gradient=get_harmo_gradient(gradient_set)
-            #parameters_to_vector,vector_to_parameters
-            model_param=model.parameters()
-            model_vec=parameters_to_vector(model_param)
+        for iter in range(variant['max_iters']):
+            env_id = iter % num_env
+            env_name = train_env_name_list[env_id]
+
+            logs, _ = trainer.pure_train_iteration_mix(
+                num_steps=1, 
+                no_prompt=args.no_prompt,
+                masks = env_masks[env_name],
+                env_name = env_name,
+            )
             
-            for env_name in gradient_set:
-                #print(grad)
-                model_vec=model_vec-gradient_set[env_name]*dict_to_vector(env_masks[env_name])
-            vector_to_parameters(model_vec,model.parameters())
-                #model_vec=
-            
-            #model_vec=model_vec.cpu()
-            #dead_masks=mask_dead_harmo(harmo_gradient,gradient_set,env_masks)
-            #new_masks=mask_dead_harmo(harmo_gradient,gradient_set,env_masks)
-            #env_masks=get_new_masks(dead_masks,new_masks,env_masks)
-            
-            
-            #print(gradient_set[env_name])
-            #print(model.parameters)
-            # for item in model.parameters():
-            #     print("1",item)
-            #     break
-            #print(gradient_set[env_name])
-            if (iter+1) % args.test_eval_interval == 0:                
+            if (iter+1) % args.test_eval_interval == 0:   
+                
+                # log training information
+                logger.record_tabular('Env Name', env_name) 
+                for key, value in logs.items():
+                    logger.record_tabular(key, value)
+                logger.dump_tabular() 
+
+                if (iter + 1) % args.test_eval_seperate_interval == 0:
+                    seperate_test = True
+                    group='test-seperate'
+                else:
+                    seperate_test = False
+                    group='test'
+                
                 # evaluate test
                 test_eval_logs = trainer.eval_iteration_metaworld(
                     env_masks, get_prompt, prompt_trajectories_list,
                     eval_episodes, test_env_name_list, test_info, test_info, variant, test_env_list, iter_num=iter + 1, 
-                    print_logs=True, no_prompt=args.no_prompt, group='test')
-                #outputs.update(test_eval_logs)
+                    no_prompt=args.no_prompt, group=group, seperate_test=seperate_test, merge_thres=args.merge_thres)
 
-                total_success_mean = test_eval_logs['Total_Success_Mean']
-                if total_success_mean > best_ret:
+                total_success_mean = test_eval_logs[f'{group}-Total-Success-Mean']
+                if total_success_mean > best_ret and seperate_test is False:
                     best_ret = total_success_mean
+                    best_iter = iter + 1
+                if total_success_mean > best_sep_ret and seperate_test is True:
+                    best_sep_ret = total_success_mean
+                    best_sep_iter = iter + 1 
                 
-                logger.log('Best success: {}, Iteration {}'.format(best_ret, iter+1))
-            if (iter+1) % args.mask_interval == 0:
-                for env_name in train_env_name_list:
+                logger.log('Best success: {}, Iteration {}'.format(best_ret, best_iter))
+                logger.log('Best seperate success: {}, Iteration {}'.format(best_sep_ret, best_sep_iter))
             
-                    original_param = model.state_dict()
-                    param_after_mask = apply_mask_model(model, env_masks[env_name])
-                    model.load_state_dict(param_after_mask)
-                    trainer.update_gradient(
-                        num_steps=10, 
+            # update the mask
+            if (iter+1) % args.mask_interval == 0:
+                gradient_set={}
+                for env_name in train_env_name_list:
+                    gradient = trainer.update_gradient(
+                        num_steps=1, 
                         no_prompt=args.no_prompt,
                         masks = env_masks[env_name],
                         env_name = env_name,
-                        alpha_t = iter / variant['max_iters'],
                     )
                     
-                    gradient_set[env_name]=parameters_to_gradvector(model)
-                    
-                    load_original_parameters(model, original_param, env_masks[env_name])
-                    
+                    gradient_set[env_name] = gradient
+
                 harmo_gradient=get_harmo_gradient(gradient_set)
-                
+        
                 env_masks_vectors={name:dict_to_vector(env_masks[name]) for name in env_masks}
-                
-                dead_masks_vectors=mask_dead_harmo(harmo_gradient,gradient_set,env_masks_vectors)
-                generate_masks_vectors=mask_generate_harmo(harmo_gradient,gradient_set,env_masks_vectors,model_vec)
+                model_vec = parameters_to_vector(trainer.model.parameters())                       
+                dead_masks_vectors=mask_dead_harmo(harmo_gradient, gradient_set, env_masks_vectors, args.mask_change_ratio)
+                generate_masks_vectors=mask_generate_harmo(harmo_gradient, gradient_set, env_masks_vectors, model_vec, thres=args.conflict_thres, ratio=args.mask_change_ratio)
                 for name in env_masks_vectors:
                     env_masks_vectors[name]=env_masks_vectors[name]-generate_masks_vectors[name]+dead_masks_vectors[name]
                     vector_to_dict(env_masks[name], env_masks_vectors[name])
-            
 
-            #outputs.update({"global_step": (iter+1)}) # set global step as iteration
         trainer.save_model(env_name=args.env,  postfix=model_post_fix+'_iter_'+str(iter + 1),  folder=save_path, env_masks=env_masks)
 
     else:
@@ -403,15 +363,20 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', action='store_true', default=False)
     parser.add_argument('--train_eval_interval', type=int, default=50)
-    parser.add_argument('--mask_interval', type=int, default=100)
-    parser.add_argument('--test_eval_interval', type=int, default=100)
+    parser.add_argument('--mask_interval', type=int, default=10)
+    parser.add_argument('--test_eval_interval', type=int, default=1000)
+    parser.add_argument('--test_eval_seperate_interval', type=int, default=5000)
     parser.add_argument('--save-interval', type=int, default=500)
     parser.add_argument('--save_path', type=str, default='./save/')
 
     parser.add_argument('--eta_min', type=int, default=10)
     parser.add_argument('--eta_max', type=int, default=1000)
     parser.add_argument('--sparsity', type=float, default=0.5)
+    parser.add_argument('--mask_change_ratio', type=float, default=0.0001)
+    parser.add_argument('--conflict_thres', type=float, default=0.)
+    parser.add_argument('--merge_thres', type=float, default=1.)
     parser.add_argument('--special_embedding', action='store_true', default=False)
+    parser.add_argument('--prefix_name', type=str, default='MT50')
 
     args = parser.parse_args()
     experiment_mix_env(args.name, variant=vars(args))

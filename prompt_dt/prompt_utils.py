@@ -543,11 +543,11 @@ def eval_episodes(target_rew, info, variant, env, env_name):
             success.append(suc)
         return {
             f'{env_name}_target_{target_rew}_return_mean': np.mean(returns),
-            f'{env_name}_target_{target_rew}_return_std': np.std(returns),
+            # f'{env_name}_target_{target_rew}_return_std': np.std(returns),
             f'{env_name}_target_{target_rew}_length_mean': np.mean(length),
-            f'{env_name}_target_{target_rew}_length_std': np.std(length),
+            # f'{env_name}_target_{target_rew}_length_std': np.std(length),
             f'{env_name}_target_{target_rew}_success_mean': np.mean(success),
-            f'{env_name}_target_{target_rew}_success_std': np.std(success),
+            # f'{env_name}_target_{target_rew}_success_std': np.std(success),
             }
     return fn
 
