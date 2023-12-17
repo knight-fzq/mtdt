@@ -18,7 +18,7 @@ import copy
 from prompt_dt.prompt_decision_transformer import PromptDecisionTransformer
 from prompt_dt.prompt_seq_trainer import PromptSequenceTrainer
 from prompt_dt.taming_trainer import TamingTrainer
-from prompt_dt.prompt_utils import get_env_list
+from prompt_dt.prompt_utils import get_env_list, report_parameters
 from prompt_dt.prompt_utils import get_prompt_batch, get_prompt, get_batch, get_batch_finetune
 from prompt_dt.prompt_utils import process_total_data_mean, load_data_prompt, process_info, load_meta_data_prompt
 from prompt_dt.prompt_utils import eval_episodes, finetune_hf_episodes, finetune_hf_episodes_offline
@@ -158,6 +158,7 @@ def experiment_mix_env(
         attn_pdrop=variant['dropout'],
     )
     model = model.to(device=device)
+    report_parameters(model, logger)
 
     warmup_steps = variant['warmup_steps']
     optimizer = torch.optim.AdamW(

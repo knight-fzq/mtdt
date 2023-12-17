@@ -189,7 +189,7 @@ def ERK_maskinit(model, density=0.5, erk_power_scale=1.0, seed=0):
 def apply_mask_model(model,masks):
     weights_after_mask=copy.deepcopy(model.state_dict())
     for key, mask in masks.items():
-        if 'embed' or 'predict' in key:
+        if 'embed' in key or 'predict' in key:
             weights_after_mask[key]=weights_after_mask[key]
         else:
             weights_after_mask[key]=weights_after_mask[key]*mask
@@ -218,13 +218,15 @@ def apply_mask_model(model,masks):
 def apply_final_mask(model, env_masks, threshold):
     weights_after_mask=copy.deepcopy(model.state_dict())
     for name, param in model.state_dict().items():
-        if 'embed' or 'predict' in name:
+        if 'embed' in name or 'predict' in name:
             weights_after_mask[name] = weights_after_mask[name]
         else:
             mask = 0
             for k in env_masks.keys():
                 if name in env_masks[k]:
                     mask += env_masks[k][name]
+                else:
+                    mask = threshold + 1
             mask = (mask >= threshold)
             if type(mask) == bool:
                 mask = float(mask)
@@ -240,7 +242,7 @@ def apply_mask_grad(model, masks):
             continue
             
         if n in masks:
-            if 'embed' or 'predict' in n:
+            if 'embed' in n or 'predict' in n:
                 p.grad=p.grad
             else:
                 p.grad=p.grad*masks[n]
