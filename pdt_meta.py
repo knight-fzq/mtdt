@@ -11,7 +11,7 @@ import argparse
 import pickle
 import random
 import sys
-import time
+
 import itertools
 import copy
 
@@ -60,6 +60,10 @@ mt50_task_list = ['basketball-v2', 'bin-picking-v2', 'button-press-topdown-v2',
     'plate-slide-back-side-v2',  'soccer-v2', 'push-wall-v2',  'shelf-place-v2', 'sweep-into-v2', 'sweep-v2', 'window-open-v2',
     'window-close-v2','assembly-v2','button-press-topdown-wall-v2','hammer-v2','peg-unplug-side-v2',
     'reach-wall-v2', 'stick-push-v2', 'stick-pull-v2', 'box-close-v2']
+# mt50_task_list = ['basketball-v2', 'bin-picking-v2', 'button-press-topdown-v2',
+#     'button-press-v2', 'button-press-wall-v2']
+# mt50_task_list = ['hammer-v2','peg-unplug-side-v2',
+#     'reach-wall-v2', 'stick-push-v2', 'stick-pull-v2', 'box-close-v2']
 
 def experiment_mix_env(
         exp_prefix,
@@ -205,7 +209,7 @@ def experiment_mix_env(
         best_iter = 0
         best_sep_iter = 0
         env_masks = {}
-        mode="random"
+        mode="random_same"
         if mode =="random_same":
             mask=ERK_maskinit(model, variant['sparsity'])
             for env_name in train_env_name_list:
@@ -234,7 +238,8 @@ def experiment_mix_env(
                 for key, value in logs.items():
                     logger.record_tabular(key, value)
                 logger.dump_tabular() 
-
+                seperate_test = True
+                #group='test-seperate'
                 if (iter + 1) % args.test_eval_seperate_interval == 0:
                     seperate_test = True
                     group='test-seperate'
@@ -262,25 +267,31 @@ def experiment_mix_env(
             # update the mask
             if (iter+1) % args.mask_interval == 0:
                 gradient_set={}
+                
                 for env_name in train_env_name_list:
                     gradient = trainer.update_gradient(
-                        num_steps=1, 
+                        num_steps=2, 
                         no_prompt=args.no_prompt,
                         masks = env_masks[env_name],
                         env_name = env_name,
                     )
                     
                     gradient_set[env_name] = gradient
-
+                
+                #print("gradient time:",time_out-time_in)
                 harmo_gradient=get_harmo_gradient(gradient_set)
         
                 env_masks_vectors={name:dict_to_vector(env_masks[name]) for name in env_masks}
                 model_vec = parameters_to_vector(trainer.model.parameters())                       
                 dead_masks_vectors=mask_dead_harmo(harmo_gradient, gradient_set, env_masks_vectors, args.mask_change_ratio)
+                # print(dead_masks_vectors)
+                # while(True):
+                #     pass
                 generate_masks_vectors=mask_generate_harmo(harmo_gradient, gradient_set, env_masks_vectors, model_vec, thresh=args.conflict_thres, ratio=args.mask_change_ratio)
                 for name in env_masks_vectors:
                     env_masks_vectors[name]=env_masks_vectors[name]-generate_masks_vectors[name]+dead_masks_vectors[name]
                     vector_to_dict(env_masks[name], env_masks_vectors[name])
+                    #print(env_masks_vectors[name])
 
         trainer.save_model(env_name=args.env,  postfix=model_post_fix+'_iter_'+str(iter + 1),  folder=save_path, env_masks=env_masks)
 
