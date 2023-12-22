@@ -19,72 +19,47 @@ def get_harmo_gradient(gradient_set):
 
 @torch.no_grad()
 def mask_dead_harmo(harmo_gradient, gradient_set, mask_vectors,change_num=10):
+    # from 0 to 1
+    # find harmonical
     num_dead=change_num
-    #index=torch.zeros(harmo_gradient.size())
-    num_task=len(mask_vectors)
-    #mask_vectors=[dict_to_vector(masks[name]) for name in masks]
     new_vectors={name:torch.zeros(mask_vectors[name].size()).cuda() for name in mask_vectors}
-    #new_masks=copy(masks)
-    simi_vec=None
 
 
     for name in mask_vectors:
-        #new_mask=torch.ones(masks_vector[idx].size())
-        #mask_vectors[name]=mask_vectors[name]
-        #masks_vector[name]=[]
-        if simi_vec==None:
-            simi_vec=harmo_gradient*gradient_set[name]/1000+(1-mask_vectors[name]*100000)
-        else:
-            simi_vec+=harmo_gradient*gradient_set[name]/1000+(1-mask_vectors[name]*100000)
-    
-    #if simi_vec>
-    value, index = torch.topk(simi_vec,k=num_dead,largest=True)
-    for name in new_vectors:
-        #mask_vectors[i]=0
+        simi_vec=harmo_gradient*gradient_set[name]+(1-mask_vectors[name]*100000)
+
+        value, index = torch.topk(simi_vec,k=num_dead,largest=True)
         new_vectors[name][index]=1
-    print(torch.sum(new_vectors[name]*mask_vectors[name]))
     
     return new_vectors
-    #new_mask_vector
-    #new_mask=copy(mask)
-    #gradient_set[i]
-    #num_dead=len(harmo_gradient)*ratio
-    #pass
+
 @torch.no_grad()
 def mask_generate_harmo(harmo_gradient, gradient_set, mask_vectors, model_vec, thresh=0, change_num=10):
+    # from 1 to 0
+    # find conflict
     num_new=change_num
-    #print(num_new)
     new_vectors={name:torch.zeros(mask_vectors[name].size()).cuda() for name in mask_vectors}
-    mask_vectors_new={name:mask_vectors[name]*100000*torch.ones(mask_vectors[name].size()).cuda() for name in mask_vectors}
+    mask_vectors_new={name:mask_vectors[name]*100000 for name in mask_vectors} # find original mask position with 1
     eps=1e-6
-    model_vec_copy=model_vec.clone().detach()
 
     for name in mask_vectors:
-        #pass
-        #mask_vec=dict_to_vector(env_masks[name])
+        model_vec_copy=model_vec.clone().detach()
         simi_vec=harmo_gradient*gradient_set[name]*mask_vectors_new[name]
-        num_conflict=torch.sum(simi_vec<thresh)
-        #print(num_conflict)
-        #sum(i < thresh for i in simi_vec)
-        #new_mask=copy(mask)
-        
-        # value, index = torch.topk(simi_vec,k=num_grow,largest=False)
-        # new_mask[index]=0
+        num_conflict=torch.sum(simi_vec<thresh)     
+
         if num_conflict>=num_new:
             
             value, index = torch.topk(simi_vec,k=num_new,largest=False)
-            new_vectors[name][index]=1
+            new_vectors[name][index] = 1
         else:
             value, index = torch.topk(simi_vec,k=num_conflict,largest=False)
             new_vectors[name][index]=1
-            model_vec_copy[index]=100000
-            
+            model_vec_copy[index] = 100000
+            index = (mask_vectors[name] == 0)
+            model_vec_copy[index] = 100000
             value, index = torch.topk(model_vec_copy,k=num_new-num_conflict,largest=False)
             new_vectors[name][index]=1
-        #print(sum(new_vectors[name]))
-    #print(len(model_vec_copy))
-    #print(len(new_vectors[name]))
-    print(torch.sum(new_vectors[name]*mask_vectors[name]))
+
     return new_vectors
 
 def get_new_masks(dead_masks,new_masks,env_masks):
