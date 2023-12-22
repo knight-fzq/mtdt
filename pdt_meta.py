@@ -27,7 +27,10 @@ from prompt_dt.fl_utils import ERK_maskinit
 from collections import namedtuple
 import json, pickle, os
 from logger import setup_logger, logger
-
+@torch.no_grad()
+def cosine_annealing(alpha_t,eta_max=30,eta_min=0):
+    
+    return int(eta_min+0.5*(eta_max-eta_min)*(1+np.cos(np.pi*alpha_t)))
 def set_seed(seed):
     random.seed(seed)
     os.environ['PYTHONHASHSEED']=str(seed)
@@ -62,8 +65,8 @@ mt50_task_list = ['basketball-v2', 'bin-picking-v2', 'button-press-topdown-v2',
     'reach-wall-v2', 'stick-push-v2', 'stick-pull-v2', 'box-close-v2']
 # mt50_task_list = ['basketball-v2', 'bin-picking-v2', 'button-press-topdown-v2',
 #     'button-press-v2', 'button-press-wall-v2']
-# mt50_task_list = ['hammer-v2','peg-unplug-side-v2',
-#     'reach-wall-v2', 'stick-push-v2', 'stick-pull-v2', 'box-close-v2']
+mt50_task_list = ['hammer-v2','peg-unplug-side-v2',
+    'reach-wall-v2', 'stick-push-v2', 'stick-pull-v2', 'box-close-v2']
 
 def experiment_mix_env(
         exp_prefix,
@@ -87,11 +90,12 @@ def experiment_mix_env(
     m = variant['m']
     smooth = variant['smooth']
     env_name_ = variant['env']
-
+    
     ######
     # construct train and test environments
     ######
-    
+    eta_min=0
+    eta_max=variant["mask_change_max"]
     cur_dir = os.getcwd()
     data_save_path = 'MT50/dataset'
     save_path = variant['save_path']
@@ -209,7 +213,7 @@ def experiment_mix_env(
         best_iter = 0
         best_sep_iter = 0
         env_masks = {}
-        mode="random_same"
+        mode="random"
         if mode =="random_same":
             mask=ERK_maskinit(model, variant['sparsity'])
             for env_name in train_env_name_list:
@@ -266,6 +270,9 @@ def experiment_mix_env(
             
             # update the mask
             if (iter+1) % args.mask_interval == 0:
+                alpha_t=iter/variant['max_iters']
+                change_num=cosine_annealing(alpha_t,eta_min=eta_min,eta_max=eta_max)
+                print(change_num)
                 gradient_set={}
                 
                 for env_name in train_env_name_list:
@@ -283,16 +290,21 @@ def experiment_mix_env(
         
                 env_masks_vectors={name:dict_to_vector(env_masks[name]) for name in env_masks}
                 model_vec = parameters_to_vector(trainer.model.parameters())                       
-                dead_masks_vectors=mask_dead_harmo(harmo_gradient, gradient_set, env_masks_vectors, args.mask_change_ratio)
+                dead_masks_vectors=mask_dead_harmo(harmo_gradient, gradient_set, env_masks_vectors, change_num)
+                
                 # print(dead_masks_vectors)
                 # while(True):
                 #     pass
-                generate_masks_vectors=mask_generate_harmo(harmo_gradient, gradient_set, env_masks_vectors, model_vec, thresh=args.conflict_thres, ratio=args.mask_change_ratio)
+                generate_masks_vectors=mask_generate_harmo(harmo_gradient, gradient_set, env_masks_vectors, model_vec, thresh=args.conflict_thres, change_num=change_num)
+                
+                
                 for name in env_masks_vectors:
                     env_masks_vectors[name]=env_masks_vectors[name]-generate_masks_vectors[name]+dead_masks_vectors[name]
                     vector_to_dict(env_masks[name], env_masks_vectors[name])
+                    print(torch.sum(generate_masks_vectors[name]*dead_masks_vectors[name]))
                     #print(env_masks_vectors[name])
-
+                #logger.log(str(torch.sum(dead_masks_vectors[name])))
+                #logger.log(str(torch.sum(generate_masks_vectors[name])))
         trainer.save_model(env_name=args.env,  postfix=model_post_fix+'_iter_'+str(iter + 1),  folder=save_path, env_masks=env_masks)
 
     else:
@@ -384,11 +396,12 @@ if __name__ == '__main__':
     parser.add_argument('--eta_min', type=int, default=10)
     parser.add_argument('--eta_max', type=int, default=1000)
     parser.add_argument('--sparsity', type=float, default=0.5)
-    parser.add_argument('--mask_change_ratio', type=float, default=0.0001)
+    parser.add_argument('--mask_change_max', type=float, default=30)
     parser.add_argument('--conflict_thres', type=float, default=0.)
     parser.add_argument('--merge_thres', type=float, default=1.)
     parser.add_argument('--special_embedding', action='store_true', default=False)
     parser.add_argument('--prefix_name', type=str, default='MT50')
 
     args = parser.parse_args()
+    
     experiment_mix_env(args.name, variant=vars(args))
