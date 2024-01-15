@@ -337,7 +337,6 @@ def experiment_mix_env(
             if (iter+1) % args.mask_interval == 0:
                 alpha_t=iter/variant['max_iters']
                 change_num=cosine_annealing(alpha_t,eta_min=eta_min,eta_max=eta_max)
-                #print(change_num)
                 gradient_set={}
                 
                 for env_name in train_env_name_list:
@@ -350,27 +349,20 @@ def experiment_mix_env(
                     
                     gradient_set[env_name] = gradient
                 
-                #print("gradient time:",time_out-time_in)
                 harmo_gradient=get_harmo_gradient(gradient_set)
         
                 env_masks_vectors={name:dict_to_vector(env_masks[name]) for name in env_masks}
-                model_vec = parameters_to_vector(trainer.model.parameters())                       
+                model_vec = parameters_to_vector(trainer.model.parameters())            
+
                 dead_masks_vectors=mask_dead_harmo(harmo_gradient, gradient_set, env_masks_vectors, change_num)
-                
-                # print(dead_masks_vectors)
-                # while(True):
-                #     pass
-                #, gamma=0, change_num=10,mode="fisher"
+
                 generate_masks_vectors=mask_generate_harmo(harmo_gradient, gradient_set, env_masks_vectors, \
                  model_vec, gamma=variant["gamma"], change_num=change_num, mode=variant["select"])
                 
                 for name in env_masks_vectors:
                     env_masks_vectors[name]=env_masks_vectors[name]-generate_masks_vectors[name]+dead_masks_vectors[name]
                     vector_to_dict(env_masks[name], env_masks_vectors[name])
-                    #print(torch.sum(generate_masks_vectors[name]*dead_masks_vectors[name]))
-                    #print(env_masks_vectors[name])
-                #logger.log(str(torch.sum(dead_masks_vectors[name])))
-                #logger.log(str(torch.sum(generate_masks_vectors[name])))
+        
         trainer.save_model(env_name=args.env,  postfix=model_post_fix+'_iter_'+str(iter + 1),  folder=save_path, env_masks=env_masks)
 
     else:

@@ -138,7 +138,8 @@ class PromptSequenceTrainer:
 
         gradient = parameters_to_gradvector(self.model)
 
-        load_original_parameters(self.model, original_param, masks)
+        # load_original_parameters(self.model, original_param, masks)
+        self.model.load_state_dict(original_param)
 
         return gradient
 
